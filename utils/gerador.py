@@ -49,8 +49,12 @@ def gerar_alvo_extremo(n: int, semente: int, pequeno: bool) -> Instancia:
     return gerar_com_solucao(n, semente, fracao_subconjunto=fracao)
 
 
+def _semente(semente_base: int, n: int, repeticao: int):
+    return semente_base * 1_000_000 + n * 100 + repeticao
+
+
 def gerar_lote(
-    n: int, quantidade: int, tipo: str, semente_base: int = 67
+    n: int, quantidade: int, tipo: str, semente_base: int
 ) -> List[Instancia]:
     fabricas = {
         "com_solucao": lambda s: gerar_com_solucao(n, s),
@@ -59,4 +63,4 @@ def gerar_lote(
         "alvo_grande": lambda s: gerar_alvo_extremo(n, s, pequeno=False),
     }
 
-    return [fabricas[tipo](semente_base + i) for i in range(quantidade)]
+    return [fabricas[tipo](_semente(semente_base, n, i)) for i in range(quantidade)]

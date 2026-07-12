@@ -5,36 +5,11 @@ import sys
 import time
 import tracemalloc
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Optional
 
 from . import backtracking, meet_in_middle
 
 _QOS_CLASS_USER_INTERACTIVE = 0x21
-
-
-def _fixar_nucleos_desempenho() -> None:
-    # macOS não expõe afinidade de CPU; QoS USER_INTERACTIVE é o mecanismo
-    # que faz o agendador manter a thread nos núcleos de desempenho (P-cores).
-    if sys.platform != "darwin":
-        return
-
-    try:
-        libsystem = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
-        libsystem.pthread_set_qos_class_self_np(_QOS_CLASS_USER_INTERACTIVE, 0)
-    except (OSError, AttributeError):
-        pass
-
-
-def nucleos_desempenho() -> int:
-    if sys.platform == "darwin":
-        try:
-            return int(
-                subprocess.check_output(["sysctl", "-n", "hw.perflevel0.logicalcpu"])
-            )
-        except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
-            pass
-
-    return mp.cpu_count()
 
 
 @dataclass
@@ -50,9 +25,32 @@ class Medicao:
     estourou_timeout: bool
 
 
-def _executar_no_filho(
-    fila: mp.Queue, algoritmo: str, transacoes, alvo, usar_poda: bool, medir_memoria: bool
-) -> None:
+def _fixar_nucleos_desempenho():
+    # macOS não expõe afinidade de CPU; QoS USER_INTERACTIVE é o mecanismo
+    # que faz o agendador manter a thread nos núcleos de desempenho (P-cores).
+    if sys.platform != "darwin":
+        return
+
+    try:
+        libsystem = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
+        libsystem.pthread_set_qos_class_self_np(_QOS_CLASS_USER_INTERACTIVE, 0)
+    except (OSError, AttributeError):
+        pass
+
+
+def nucleos_desempenho():
+    if sys.platform == "darwin":
+        try:
+            return int(
+                subprocess.check_output(["sysctl", "-n", "hw.perflevel0.logicalcpu"])
+            )
+        except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
+            pass
+
+    return mp.cpu_count()
+
+
+def _executar_no_filho(fila, algoritmo, transacoes, alvo, usar_poda, medir_memoria):
     _fixar_nucleos_desempenho()
 
     if medir_memoria:
@@ -89,15 +87,8 @@ def _executar_no_filho(
     )
 
 
-def _rodar_filho(
-    algoritmo: str,
-    transacoes: List[int],
-    alvo: int,
-    timeout_s: float,
-    usar_poda: bool,
-    medir_memoria: bool,
-) -> Optional[Dict]:
-    fila: mp.Queue = mp.Queue()
+def _rodar_filho(algoritmo, transacoes, alvo, timeout_s, usar_poda, medir_memoria):
+    fila = mp.Queue()
 
     proc = mp.Process(
         target=_executar_no_filho,
@@ -114,13 +105,7 @@ def _rodar_filho(
     return fila.get() if not fila.empty() else None
 
 
-def medir_execucao(
-    algoritmo: str,
-    transacoes: List[int],
-    alvo: int,
-    timeout_s: float = 60.0,
-    usar_poda: bool = True,
-) -> Optional[Dict]:
+def medir_execucao(algoritmo, transacoes, alvo, timeout_s, usar_poda):
     # Tempo e memória são medidos em execuções separadas: o tracemalloc
     # intercepta cada alocação e infla o tempo de forma desigual entre os
     # algoritmos (o meet in the middle aloca muito mais que o backtracking).
