@@ -7,7 +7,7 @@ import tracemalloc
 from dataclasses import dataclass
 from typing import Optional
 
-from . import backtracking, meet_in_middle
+from . import backtracking, fft, meet_in_middle
 
 _QOS_CLASS_USER_INTERACTIVE = 0x21
 
@@ -67,6 +67,9 @@ def _executar_no_filho(fila, algoritmo, transacoes, alvo, usar_poda, medir_memor
             alvo,
         )
         estados = res.estados
+    elif algoritmo == "fft":
+        res = fft.resolver(transacoes, alvo)
+        estados = res.coeficientes
     else:
         raise ValueError(f"Algoritmo desconhecido: {algoritmo!r}")
 
