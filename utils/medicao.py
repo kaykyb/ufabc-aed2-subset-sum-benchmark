@@ -1,9 +1,12 @@
 import ctypes
 import multiprocessing as mp
+import os
+import re
 import subprocess
 import sys
 import time
 import tracemalloc
+from glob import glob
 from dataclasses import dataclass
 from typing import Optional
 
@@ -25,17 +28,46 @@ class Medicao:
     estourou_timeout: bool
 
 
-def _fixar_nucleos_desempenho():
-    # macOS não expõe afinidade de CPU; QoS USER_INTERACTIVE é o mecanismo
-    # que faz o agendador manter a thread nos núcleos de desempenho (P-cores).
-    if sys.platform != "darwin":
-        return
+def _nucleos_rapidos_linux():
+    # Análogo Linux do hw.perflevel0: em CPUs híbridas (Intel P/E-cores,
+    # ARM big.LITTLE) os núcleos de desempenho têm a maior frequência máxima.
+    # Em CPU homogênea todos empatam e o conjunto devolvido é o total.
+    frequencias = {}
+    for caminho in glob("/sys/devices/system/cpu/cpu[0-9]*/cpufreq/cpuinfo_max_freq"):
+        try:
+            with open(caminho) as arq:
+                frequencias[int(re.search(r"cpu(\d+)", caminho).group(1))] = int(
+                    arq.read()
+                )
+        except (OSError, ValueError):
+            pass
 
-    try:
-        libsystem = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
-        libsystem.pthread_set_qos_class_self_np(_QOS_CLASS_USER_INTERACTIVE, 0)
-    except (OSError, AttributeError):
-        pass
+    if not frequencias:
+        return None  # sysfs indisponível (container, VM)
+
+    maior = max(frequencias.values())
+    return {cpu for cpu, freq in frequencias.items() if freq == maior}
+
+
+def _fixar_nucleos_desempenho():
+    if sys.platform == "darwin":
+        # macOS não expõe afinidade de CPU; QoS USER_INTERACTIVE é o mecanismo
+        # que faz o agendador manter a thread nos núcleos de desempenho (P-cores).
+        try:
+            libsystem = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
+            libsystem.pthread_set_qos_class_self_np(_QOS_CLASS_USER_INTERACTIVE, 0)
+        except (OSError, AttributeError):
+            pass
+
+    elif sys.platform == "linux":
+        # Afinidade não exige privilégio (nice negativo exigiria CAP_SYS_NICE);
+        # fixar nos núcleos rápidos já evita a migração para E-cores.
+        nucleos = _nucleos_rapidos_linux()
+        if nucleos:
+            try:
+                os.sched_setaffinity(0, nucleos)
+            except OSError:
+                pass
 
 
 def nucleos_desempenho():
@@ -46,6 +78,11 @@ def nucleos_desempenho():
             )
         except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
             pass
+
+    if sys.platform == "linux":
+        nucleos = _nucleos_rapidos_linux()
+        if nucleos:
+            return len(nucleos)
 
     return mp.cpu_count()
 
