@@ -1,0 +1,5 @@
+# Dependências de terceiros do projeto (Python 3.10+; testado com 3.14.5).
+numpy>=1.24
+pandas>=2.0
+matplotlib>=3.7
+jupyter>=1.0
