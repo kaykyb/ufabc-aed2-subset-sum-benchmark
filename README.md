@@ -75,7 +75,7 @@ Certifique-se de que o **Git** e o **Python 3** estejam instalados em sua máqui
 ```bash
 git clone https://github.com/kaykyb/ufabc-aed2-subset-sum-benchmark.git
 cd ufabc-aed2-subset-sum-benchmark
-pip install -r requirements.txt   # se existir; caso contrário, instale jupyter, numpy e matplotlib manualmente
+pip install -r requirements.txt
 jupyter notebook
 ```
 
